@@ -218,12 +218,14 @@
 ```bash
 git clone <your-repo-url>
 cd crypto_analyzer
+```
 Шаг 2: Установка зависимостей
-bash
+```bash
 pip install -r requirements.txt
+```
 Шаг 3: Настройка базы данных
 Вариант А: Локальный PostgreSQL
-bash
+```bash
 # macOS
 brew install postgresql@15
 brew services start postgresql@15
@@ -237,15 +239,17 @@ sudo -u postgres createdb crypto_analyzer
 # Windows
 # Скачайте и установите PostgreSQL с официального сайта
 # Создайте базу данных через pgAdmin или psql
+```
 Вариант Б: Docker
-bash
+```bash
 docker-compose up -d
 
 # Проверка
 docker ps
 docker logs crypto_analyzer_db
+```
 Шаг 4: Конфигурация
-bash
+```bash
 # Копирование примера конфигурации
 cp .env.example .env
 
@@ -274,23 +278,26 @@ psql -h localhost -U postgres -d crypto_analyzer -c "\conninfo"
 
 # Тестовый запуск
 python main.py --test
-```
+
 
 ## 🚀 Использование
 Режимы запуска
-bash
+```bash
 # Запуск планировщика (обновление каждый час)
 python main.py
 
 # Однократное выполнение
 python main.py --once
-
+```
 # Тестовый запуск (вывод в консоль, без Telegram)
+```
 python main.py --test
+```
+
 Демонизация (Linux/macOS)
 Использование systemd (Linux)
 Создайте файл /etc/systemd/system/crypto-analyzer.service:
-
+```
 ini
 [Unit]
 Description=Crypto Oscillator Analyzer
@@ -338,9 +345,12 @@ xml
     <string>/path/to/crypto_analyzer/stderr.log</string>
 </dict>
 </plist>
-bash
+```
+---
+```bash
 launchctl load ~/Library/LaunchAgents/com.crypto.analyzer.plist
 launchctl start com.crypto.analyzer
+```
 📊 Осцилляторы и сигналы
 Список рассчитываемых осцилляторов
 №	Осциллятор	Период	Сигнал перекупленности	Сигнал перепроданности
