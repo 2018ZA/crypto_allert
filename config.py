@@ -28,23 +28,20 @@ class Config:
     # Для каждого источника указан свой тикер.
     # None означает, что инструмент недоступен на этом источнике.
     INSTRUMENTS = [
-        {"id": "btc",  "okx": "BTC-USDT",  "okx_type": "SPOT", "binance": "BTCUSDT"},
-        {"id": "eth",  "okx": "ETH-USDT",  "okx_type": "SPOT", "binance": "ETHUSDT"},
-        {"id": "bnb",  "okx": "BNB-USDT",  "okx_type": "SPOT", "binance": "BNBUSDT"},
-        {"id": "xrp",  "okx": "XRP-USDT",  "okx_type": "SPOT", "binance": "XRPUSDT"},
-        {"id": "sol",  "okx": "SOL-USDT",  "okx_type": "SPOT", "binance": "SOLUSDT"},
-        {"id": "trx",  "okx": "TRX-USDT",  "okx_type": "SPOT", "binance": "TRXUSDT"},
-        {"id": "doge", "okx": "DOGE-USDT", "okx_type": "SPOT", "binance": "DOGEUSDT"},
-        {"id": "ada",  "okx": "ADA-USDT",  "okx_type": "SPOT", "binance": "ADAUSDT"},
-        {"id": "jup",  "okx": "JUP-USDT",  "okx_type": "SPOT", "binance": "JUPUSDT"},
-        {"id": "ton",  "okx": "TON-USDT",  "okx_type": "SPOT", "binance": "TONUSDT"},
-        {"id": "link", "okx": "LINK-USDT", "okx_type": "SPOT", "binance": "LINKUSDT"},
-        # Металлы есть только на OKX (через бессрочные свопы).
-        # На Binance их в споте нет — инструмент будет пропущен.
-        {"id": "xau",  "okx": "XAU-USDT-SWAP", "okx_type": "SWAP", "binance": None},
-        {"id": "xag",  "okx": "XAG-USDT-SWAP", "okx_type": "SWAP", "binance": None},
-        {"id": "xpt",  "okx": "XPT-USDT-SWAP", "okx_type": "SWAP", "binance": None},
-    ]
+    {"id": "BTCUSDT",  "okx": "BTC-USDT",  "okx_type": "SPOT", "binance": "BTCUSDT"},
+    {"id": "ETHUSDT",  "okx": "ETH-USDT",  "okx_type": "SPOT", "binance": "ETHUSDT"},
+    {"id": "BNBUSDT",  "okx": "BNB-USDT",  "okx_type": "SPOT", "binance": "BNBUSDT"},
+    {"id": "XRPUSDT",  "okx": "XRP-USDT",  "okx_type": "SPOT", "binance": "XRPUSDT"},
+    {"id": "SOLUSDT",  "okx": "SOL-USDT",  "okx_type": "SPOT", "binance": "SOLUSDT"},
+    {"id": "TRXUSDT",  "okx": "TRX-USDT",  "okx_type": "SPOT", "binance": "TRXUSDT"},
+    {"id": "DOGEUSDT", "okx": "DOGE-USDT", "okx_type": "SPOT", "binance": "DOGEUSDT"},
+    {"id": "ADAUSDT",  "okx": "ADA-USDT",  "okx_type": "SPOT", "binance": "ADAUSDT"},
+    {"id": "JUPUSDT",  "okx": "JUP-USDT",  "okx_type": "SPOT", "binance": "JUPUSDT"},
+    {"id": "LINKUSDT", "okx": "LINK-USDT", "okx_type": "SPOT", "binance": "LINKUSDT"},
+    {"id": "XAUUSDT",  "okx": "XAU-USDT-SWAP", "okx_type": "SWAP", "binance": None},
+    {"id": "XAGUSDT",  "okx": "XAG-USDT-SWAP", "okx_type": "SWAP", "binance": None},
+    {"id": "XPTUSDT",  "okx": "XPT-USDT-SWAP", "okx_type": "SWAP", "binance": None},
+]
 
     UPDATE_INTERVAL_HOURS = int(os.getenv('UPDATE_INTERVAL_HOURS', '1'))
 

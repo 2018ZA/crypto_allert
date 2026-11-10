@@ -98,7 +98,7 @@ class Database:
                 .filter_by(symbol=symbol)
                 .order_by(desc(KlineData.open_time))
                 .limit(limit)
-                .all()
+                .distinct(KlineData.open_time).unique().all()
             )
             return [
                 {
