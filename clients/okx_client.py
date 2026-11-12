@@ -73,92 +73,106 @@ class OKXClient(MarketDataClient):
             return False
 
     def fetch_derivatives_snapshot(self, inst_id: str, period: str = "1H") -> Optional[Dict]:
-        """
-        OKX perp-metrics + taker-volume за один вызов.
-        Возвращает нормализованный снимок.
-        """
-        # 1) perp-metrics: funding, OI, L/S ratio
-        metrics = self._get_perp_metrics(inst_id, period)
-        if metrics is None:
+        """Снимок из 4 нативных публичных эндпоинтов OKX (без API-ключа)."""
+        funding = self._get_funding_rate(inst_id)
+        oi = self._get_open_interest(inst_id)
+        taker = self._get_taker_volume_contract(inst_id, period)
+        ccy = inst_id.split("-")[0]
+        ls_ratio = self._get_long_short_ratio(ccy, period)
+
+        if not funding and not oi and not taker:
+            logger.warning(f"[OKX] Нет данных для {inst_id}, пропуск")
             return None
 
-        # 2) taker-volume: buy/sell volume (отдельный эндпоинт, ccy вместо instId)
-        ccy = inst_id.split("-")[0]  # BTC-USDT-SWAP -> BTC
-        taker = self._get_taker_volume(ccy, period)
+        ts = None
+        for src in (taker, ls_ratio, funding, oi):
+            if src and src.get("timestamp"):
+                ts = src["timestamp"]
+                break
+        if not ts:
+            return None
 
         return {
-            "timestamp": metrics["timestamp"],
-            "funding_rate": metrics.get("funding_rate"),
-            "open_interest_contracts": metrics.get("open_interest_contracts"),
-            "open_interest_usd": metrics.get("open_interest_usd"),
-            "long_short_ratio": metrics.get("long_short_ratio"),
+            "timestamp": ts,
+            "funding_rate": funding.get("rate") if funding else None,
+            "open_interest_contracts": oi.get("oi") if oi else None,
+            "open_interest_usd": oi.get("oi_usd") if oi else None,
+            "long_short_ratio": ls_ratio.get("ratio") if ls_ratio else None,
             "taker_buy_volume": taker.get("buy_volume") if taker else None,
             "taker_sell_volume": taker.get("sell_volume") if taker else None,
-            "volume_usd": metrics.get("volume_usd"),
+            "volume_usd": None,
         }
 
-    def _get_perp_metrics(self, inst_id: str, period: str) -> Optional[Dict]:
-        """GET /api/v5/rubik/stat/contracts/perp-metrics"""
+    def _get_funding_rate(self, inst_id: str) -> Optional[Dict]:
         try:
-            r = requests.get(
-                f"{self.BASE_URL}/rubik/stat/contracts/perp-metrics",
-                params={"instId": inst_id, "period": period},
-                timeout=10,
-            )
+            r = requests.get(f"{self.BASE_URL}/public/funding-rate", params={"instId": inst_id}, timeout=10)
             r.raise_for_status()
             data = r.json().get("data") or []
             if not data:
                 return None
-            # OKX: [ts, fundingRate, oi, volumeUsd, longShortRatio]
             row = data[0]
-            return {
-                "timestamp": int(row[0]),
-                "funding_rate": float(row[1]) if len(row) > 1 else None,
-                "open_interest_contracts": float(row[2]) if len(row) > 2 else None,
-                "open_interest_usd": None,  # если OKX отдаёт notional — заполнить здесь
-                "volume_usd": float(row[3]) if len(row) > 3 else None,
-                "long_short_ratio": float(row[4]) if len(row) > 4 else None,
-            }
+            return {"timestamp": int(row["fundingTime"]),
+                    "rate": float(row["fundingRate"]) if row.get("fundingRate") else None}
         except Exception as e:
-            logger.error(f"[OKX] perp-metrics {inst_id}: {e}")
+            logger.error(f"[OKX] funding-rate {inst_id}: {e}")
             return None
 
-    def _get_taker_volume(self, ccy: str, period: str) -> Optional[Dict]:
-        """GET /api/v5/rubik/stat/taker-volume — порядок: sell, buy"""
+    def _get_open_interest(self, inst_id: str) -> Optional[Dict]:
         try:
-            r = requests.get(
-                f"{self.BASE_URL}/rubik/stat/taker-volume",
-                params={"ccy": ccy, "instType": "CONTRACTS", "period": period},
-                timeout=10,
-            )
+            r = requests.get(f"{self.BASE_URL}/public/open-interest",
+                             params={"instType": "SWAP", "instId": inst_id}, timeout=10)
             r.raise_for_status()
             data = r.json().get("data") or []
             if not data:
                 return None
-            row = data[0]  # [ts, sellVol, buyVol]
-            return {
-                "sell_volume": float(row[1]) if len(row) > 1 else None,
-                "buy_volume": float(row[2]) if len(row) > 2 else None,
-            }
+            row = data[0]
+            return {"timestamp": int(row["ts"]),
+                    "oi": float(row["oi"]) if row.get("oi") else None,
+                    "oi_usd": float(row["oiUsd"]) if row.get("oiUsd") else None}
         except Exception as e:
-            logger.error(f"[OKX] taker-volume {ccy}: {e}")
+            logger.error(f"[OKX] open-interest {inst_id}: {e}")
+            return None
+
+    def _get_taker_volume_contract(self, inst_id: str, period: str) -> Optional[Dict]:
+        try:
+            r = requests.get(f"{self.BASE_URL}/rubik/stat/taker-volume-contract",
+                             params={"instId": inst_id, "period": period}, timeout=10)
+            r.raise_for_status()
+            data = r.json().get("data") or []
+            if not data:
+                return None
+            row = data[0]
+            return {"timestamp": int(row[0]),
+                    "sell_volume": float(row[1]) if len(row) > 1 else None,
+                    "buy_volume": float(row[2]) if len(row) > 2 else None}
+        except Exception as e:
+            logger.error(f"[OKX] taker-volume-contract {inst_id}: {e}")
+            return None
+
+    def _get_long_short_ratio(self, ccy: str, period: str) -> Optional[Dict]:
+        try:
+            r = requests.get(f"{self.BASE_URL}/rubik/stat/contracts/long-short-account-ratio",
+                             params={"ccy": ccy, "period": period}, timeout=10)
+            r.raise_for_status()
+            data = r.json().get("data") or []
+            if not data:
+                return None
+            row = data[0]
+            return {"timestamp": int(row[0]),
+                    "ratio": float(row[1]) if len(row) > 1 else None}
+        except Exception as e:
+            logger.error(f"[OKX] long-short-account-ratio {ccy}: {e}")
             return None
 
     def fetch_funding_history(self, inst_id: str, limit: int = 100) -> List[Dict]:
-        """GET /api/v5/public/funding-rate-history"""
         try:
-            r = requests.get(
-                f"{self.BASE_URL}/public/funding-rate-history",
-                params={"instId": inst_id, "limit": str(min(limit, 100))},
-                timeout=10,
-            )
+            r = requests.get(f"{self.BASE_URL}/public/funding-rate-history",
+                             params={"instId": inst_id, "limit": str(min(limit, 100))}, timeout=10)
             r.raise_for_status()
             data = r.json().get("data") or []
-            return [
-                {"funding_time": int(row["fundingTime"]),
-                "realized_rate": float(row["realizedRate"])}
-                for row in data
-            ]
+            return [{"funding_time": int(row["fundingTime"]),
+                     "realized_rate": float(row["realizedRate"])}
+                    for row in data]
         except Exception as e:
             logger.error(f"[OKX] funding-history {inst_id}: {e}")
             return []

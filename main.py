@@ -212,8 +212,11 @@ class CryptoAnalyzerApp:
 
         for instrument in config.INSTRUMENTS:
             inst_id = instrument.get("okx")
-            if not inst_id or not inst_id.endswith("-SWAP"):
-                continue  # funding/OI только для свопов
+            if not inst_id:
+                continue
+            # Для деривативов используем SWAP-версию, даже если в конфиге спот
+            if not inst_id.endswith("-SWAP"):
+                inst_id = inst_id + "-SWAP"
 
             symbol = instrument["id"]
 
