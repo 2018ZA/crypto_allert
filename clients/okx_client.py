@@ -1,7 +1,7 @@
 # clients/okx_client.py
 import requests
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from .base_client import MarketDataClient
 
 logger = logging.getLogger(__name__)
@@ -71,3 +71,94 @@ class OKXClient(MarketDataClient):
             return r.json().get("code") == "0"
         except Exception:
             return False
+
+    def fetch_derivatives_snapshot(self, inst_id: str, period: str = "1H") -> Optional[Dict]:
+        """
+        OKX perp-metrics + taker-volume за один вызов.
+        Возвращает нормализованный снимок.
+        """
+        # 1) perp-metrics: funding, OI, L/S ratio
+        metrics = self._get_perp_metrics(inst_id, period)
+        if metrics is None:
+            return None
+
+        # 2) taker-volume: buy/sell volume (отдельный эндпоинт, ccy вместо instId)
+        ccy = inst_id.split("-")[0]  # BTC-USDT-SWAP -> BTC
+        taker = self._get_taker_volume(ccy, period)
+
+        return {
+            "timestamp": metrics["timestamp"],
+            "funding_rate": metrics.get("funding_rate"),
+            "open_interest_contracts": metrics.get("open_interest_contracts"),
+            "open_interest_usd": metrics.get("open_interest_usd"),
+            "long_short_ratio": metrics.get("long_short_ratio"),
+            "taker_buy_volume": taker.get("buy_volume") if taker else None,
+            "taker_sell_volume": taker.get("sell_volume") if taker else None,
+            "volume_usd": metrics.get("volume_usd"),
+        }
+
+    def _get_perp_metrics(self, inst_id: str, period: str) -> Optional[Dict]:
+        """GET /api/v5/rubik/stat/contracts/perp-metrics"""
+        try:
+            r = requests.get(
+                f"{self.BASE_URL}/rubik/stat/contracts/perp-metrics",
+                params={"instId": inst_id, "period": period},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json().get("data") or []
+            if not data:
+                return None
+            # OKX: [ts, fundingRate, oi, volumeUsd, longShortRatio]
+            row = data[0]
+            return {
+                "timestamp": int(row[0]),
+                "funding_rate": float(row[1]) if len(row) > 1 else None,
+                "open_interest_contracts": float(row[2]) if len(row) > 2 else None,
+                "open_interest_usd": None,  # если OKX отдаёт notional — заполнить здесь
+                "volume_usd": float(row[3]) if len(row) > 3 else None,
+                "long_short_ratio": float(row[4]) if len(row) > 4 else None,
+            }
+        except Exception as e:
+            logger.error(f"[OKX] perp-metrics {inst_id}: {e}")
+            return None
+
+    def _get_taker_volume(self, ccy: str, period: str) -> Optional[Dict]:
+        """GET /api/v5/rubik/stat/taker-volume — порядок: sell, buy"""
+        try:
+            r = requests.get(
+                f"{self.BASE_URL}/rubik/stat/taker-volume",
+                params={"ccy": ccy, "instType": "CONTRACTS", "period": period},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json().get("data") or []
+            if not data:
+                return None
+            row = data[0]  # [ts, sellVol, buyVol]
+            return {
+                "sell_volume": float(row[1]) if len(row) > 1 else None,
+                "buy_volume": float(row[2]) if len(row) > 2 else None,
+            }
+        except Exception as e:
+            logger.error(f"[OKX] taker-volume {ccy}: {e}")
+            return None
+
+    def fetch_funding_history(self, inst_id: str, limit: int = 100) -> List[Dict]:
+        """GET /api/v5/public/funding-rate-history"""
+        try:
+            r = requests.get(
+                f"{self.BASE_URL}/public/funding-rate-history",
+                params={"instId": inst_id, "limit": str(min(limit, 100))},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json().get("data") or []
+            return [
+                {"funding_time": int(row["fundingTime"]),
+                "realized_rate": float(row["realizedRate"])}
+                for row in data
+            ]
+        except Exception as e:
+            logger.error(f"[OKX] funding-history {inst_id}: {e}")
+            return []

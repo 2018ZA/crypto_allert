@@ -8,6 +8,10 @@ from datetime import datetime
 from typing import List, Optional
 import logging
 
+from models import DerivativesSnapshot, FundingEvent
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from datetime import datetime
+
 logger = logging.getLogger(__name__)
 
 
@@ -123,5 +127,55 @@ class Database:
             )
             return latest.id if latest else None
 
+
+    def save_derivatives_snapshot(self, symbol: str, inst_id: str, snapshot: dict):
+        """Upsert снимка деривативных метрик."""
+        if not snapshot:
+            return
+        with self.get_session() as session:
+            stmt = pg_insert(DerivativesSnapshot).values(
+                symbol=symbol,
+                inst_id=inst_id,
+                timestamp=datetime.fromtimestamp(snapshot["timestamp"] / 1000),
+                funding_rate=snapshot.get("funding_rate"),
+                open_interest_contracts=snapshot.get("open_interest_contracts"),
+                open_interest_usd=snapshot.get("open_interest_usd"),
+                long_short_ratio=snapshot.get("long_short_ratio"),
+                taker_buy_volume=snapshot.get("taker_buy_volume"),
+                taker_sell_volume=snapshot.get("taker_sell_volume"),
+                volume_usd=snapshot.get("volume_usd"),
+                source="okx",
+            )
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_deriv_snapshot",
+                set_={
+                    "funding_rate": stmt.excluded.funding_rate,
+                    "open_interest_contracts": stmt.excluded.open_interest_contracts,
+                    "open_interest_usd": stmt.excluded.open_interest_usd,
+                    "long_short_ratio": stmt.excluded.long_short_ratio,
+                    "taker_buy_volume": stmt.excluded.taker_buy_volume,
+                    "taker_sell_volume": stmt.excluded.taker_sell_volume,
+                    "volume_usd": stmt.excluded.volume_usd,
+                },
+            )
+            session.execute(stmt)
+            logger.info(f"Сохранён derivatives snapshot для {symbol}")
+
+    def save_funding_events(self, symbol: str, inst_id: str, events: list):
+        """Пакетный upsert событий funding."""
+        if not events:
+            return
+        with self.get_session() as session:
+            rows = [{
+                "symbol": symbol,
+                "inst_id": inst_id,
+                "funding_time": datetime.fromtimestamp(e["funding_time"] / 1000),
+                "realized_rate": e["realized_rate"],
+                "source": "okx",
+            } for e in events]
+            stmt = pg_insert(FundingEvent).values(rows)
+            stmt = stmt.on_conflict_do_nothing(constraint="uq_funding_event")
+            session.execute(stmt)
+            logger.info(f"Сохранено {len(rows)} funding events для {symbol}")
 
 db = Database()

@@ -5,6 +5,8 @@ import logging
 from datetime import datetime
 import sys
 
+
+
 from config import config
 from database import db
 from clients.factory import get_client
@@ -200,6 +202,36 @@ class CryptoAnalyzerApp:
             logger.info("Приложение остановлено пользователем")
             self.is_running = False
 
+    def sync_derivatives(self):
+        """Синхронизация деривативных метрик для инструментов OKX."""
+        if not config.DERIVATIVES_ENABLED:
+            return
+        if self.client.name != "okx":
+            logger.debug("Деривативы поддерживаются только для OKX, пропуск")
+            return
+
+        for instrument in config.INSTRUMENTS:
+            inst_id = instrument.get("okx")
+            if not inst_id or not inst_id.endswith("-SWAP"):
+                continue  # funding/OI только для свопов
+
+            symbol = instrument["id"]
+
+            # 1) Снимок текущих метрик
+            snapshot = self.client.fetch_derivatives_snapshot(
+                inst_id, period=config.DERIVATIVES_PERIOD
+            )
+            if snapshot:
+                db.save_derivatives_snapshot(symbol, inst_id, snapshot)
+
+            # 2) История funding (раз в сутки или при первом запуске)
+            #    Можно вызывать не каждый цикл, а по расписанию
+            # events = self.client.fetch_funding_history(inst_id, limit=config.FUNDING_HISTORY_LIMIT)
+            # if events:
+            #     db.save_funding_events(symbol, inst_id, events)
+
+        logger.info("Синхронизация деривативов завершена")
+
 
 def main():
     app = CryptoAnalyzerApp()
@@ -272,4 +304,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    app = CryptoAnalyzerApp()
+    app.initialize()
+
+    # Основной цикл анализа (существующий)
+    schedule.every(config.UPDATE_INTERVAL_HOURS).hours.do(app.process_update)
+
+    # Синхронизация деривативов — отдельная задача, чаще
+    if config.DERIVATIVES_ENABLED:
+        schedule.every(config.DERIVATIVES_SYNC_INTERVAL_MIN).minutes.do(app.sync_derivatives)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
