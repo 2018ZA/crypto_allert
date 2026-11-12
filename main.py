@@ -314,6 +314,13 @@ if __name__ == "__main__":
     schedule.every(config.UPDATE_INTERVAL_HOURS).hours.do(app.process_update)
 
     # Синхронизация деривативов — отдельная задача, чаще
+    # Разовый первый запуск при старте (не ждать 15 минут)
+    if config.DERIVATIVES_ENABLED:
+        try:
+            app.sync_derivatives()
+        except Exception as _e:
+            logger.error(f"Initial sync_derivatives failed: {_e}")
+
     if config.DERIVATIVES_ENABLED:
         schedule.every(config.DERIVATIVES_SYNC_INTERVAL_MIN).minutes.do(app.sync_derivatives)
 
