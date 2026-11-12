@@ -80,3 +80,61 @@ class OscillatorData(Base):
 
     def __repr__(self):
         return f"<OscillatorData(symbol={self.symbol}, timestamp={self.timestamp})>"
+
+# models.py (дополнение)
+
+class DerivativesSnapshot(Base):
+    """Периодический снимок деривативных метрик OKX."""
+    __tablename__ = 'derivatives_snapshots'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), nullable=False)          # btc, eth (внутренний id)
+    inst_id = Column(String(30), nullable=False)          # BTC-USDT-SWAP
+    timestamp = Column(DateTime, nullable=False, index=True)
+    funding_rate = Column(Float, nullable=True)
+    open_interest_contracts = Column(Float, nullable=True)
+    open_interest_usd = Column(Float, nullable=True)      # notional
+    long_short_ratio = Column(Float, nullable=True)
+    taker_buy_volume = Column(Float, nullable=True)
+    taker_sell_volume = Column(Float, nullable=True)
+    volume_usd = Column(Float, nullable=True)
+    source = Column(String(20), nullable=False, default='okx')
+    created_at = Column(DateTime, server_default=func.now())
+
+    def __repr__(self):
+        return f"<DerivativesSnapshot {self.symbol} {self.timestamp}>"
+
+
+class FundingEvent(Base):
+    """Исторические события сеттлмента funding rate."""
+    __tablename__ = 'funding_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), nullable=False)
+    inst_id = Column(String(30), nullable=False)
+    funding_time = Column(DateTime, nullable=False, index=True)
+    realized_rate = Column(Float, nullable=False)
+    source = Column(String(20), nullable=False, default='okx')
+    created_at = Column(DateTime, server_default=func.now())
+
+    def __repr__(self):
+        return f"<FundingEvent {self.symbol} {self.funding_time}>"
+
+
+class LiquidationEvent(Base):
+    """События ликвидаций (опционально, через WebSocket)."""
+    __tablename__ = 'liquidation_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(20), nullable=False)
+    inst_id = Column(String(30), nullable=False)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    pos_side = Column(String(10), nullable=False)          # long / short
+    price = Column(Float, nullable=False)
+    size_contracts = Column(Float, nullable=False)
+    size_usd = Column(Float, nullable=True)
+    source = Column(String(20), nullable=False, default='okx')
+    created_at = Column(DateTime, server_default=func.now())
+
+    def __repr__(self):
+        return f"<LiquidationEvent {self.symbol} {self.timestamp}>"

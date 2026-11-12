@@ -43,6 +43,12 @@ class Config:
     {"id": "XPTUSDT",  "okx": "XPT-USDT-SWAP", "okx_type": "SWAP", "binance": None},
 ]
 
+
+    DERIVATIVES_ENABLED = os.getenv('DERIVATIVES_ENABLED', 'true').lower() == 'true'
+    DERIVATIVES_PERIOD = os.getenv('DERIVATIVES_PERIOD', '1H')  # 1H, 4H, 1D
+    DERIVATIVES_SYNC_INTERVAL_MIN = int(os.getenv('DERIVATIVES_SYNC_INTERVAL_MIN', '15'))
+    FUNDING_HISTORY_LIMIT = int(os.getenv('FUNDING_HISTORY_LIMIT', '100'))
+
     UPDATE_INTERVAL_HOURS = int(os.getenv('UPDATE_INTERVAL_HOURS', '1'))
 
     @property
