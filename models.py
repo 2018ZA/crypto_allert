@@ -1,5 +1,5 @@
 # models.py (без изменений)
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 
@@ -88,18 +88,22 @@ class DerivativesSnapshot(Base):
     __tablename__ = 'derivatives_snapshots'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    symbol = Column(String(20), nullable=False)          # btc, eth (внутренний id)
-    inst_id = Column(String(30), nullable=False)          # BTC-USDT-SWAP
+    symbol = Column(String(20), nullable=False)
+    inst_id = Column(String(30), nullable=False)
     timestamp = Column(DateTime, nullable=False, index=True)
     funding_rate = Column(Float, nullable=True)
     open_interest_contracts = Column(Float, nullable=True)
-    open_interest_usd = Column(Float, nullable=True)      # notional
+    open_interest_usd = Column(Float, nullable=True)
     long_short_ratio = Column(Float, nullable=True)
     taker_buy_volume = Column(Float, nullable=True)
     taker_sell_volume = Column(Float, nullable=True)
     volume_usd = Column(Float, nullable=True)
     source = Column(String(20), nullable=False, default='okx')
     created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('symbol', 'timestamp', 'source', name='uq_deriv_snapshot'),
+    )
 
     def __repr__(self):
         return f"<DerivativesSnapshot {self.symbol} {self.timestamp}>"
@@ -117,6 +121,10 @@ class FundingEvent(Base):
     source = Column(String(20), nullable=False, default='okx')
     created_at = Column(DateTime, server_default=func.now())
 
+    __table_args__ = (
+        UniqueConstraint('symbol', 'funding_time', 'source', name='uq_funding_event'),
+    )
+
     def __repr__(self):
         return f"<FundingEvent {self.symbol} {self.funding_time}>"
 
@@ -129,12 +137,16 @@ class LiquidationEvent(Base):
     symbol = Column(String(20), nullable=False)
     inst_id = Column(String(30), nullable=False)
     timestamp = Column(DateTime, nullable=False, index=True)
-    pos_side = Column(String(10), nullable=False)          # long / short
+    pos_side = Column(String(10), nullable=False)
     price = Column(Float, nullable=False)
     size_contracts = Column(Float, nullable=False)
     size_usd = Column(Float, nullable=True)
     source = Column(String(20), nullable=False, default='okx')
     created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('symbol', 'timestamp', 'price', 'size_contracts', 'pos_side', name='uq_liquidation_event'),
+    )
 
     def __repr__(self):
         return f"<LiquidationEvent {self.symbol} {self.timestamp}>"
