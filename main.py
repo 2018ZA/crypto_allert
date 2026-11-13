@@ -229,9 +229,14 @@ class CryptoAnalyzerApp:
 
             # 2) История funding (раз в сутки или при первом запуске)
             #    Можно вызывать не каждый цикл, а по расписанию
-            # events = self.client.fetch_funding_history(inst_id, limit=config.FUNDING_HISTORY_LIMIT)
-            # if events:
-            #     db.save_funding_events(symbol, inst_id, events)
+            events = self.client.fetch_funding_history(inst_id, limit=config.FUNDING_HISTORY_LIMIT)
+            if events:
+                db.save_funding_events(symbol, inst_id, events)
+
+            # Ликвидации (последние 100 событий)
+            liq = self.client.fetch_liquidations(inst_id, limit=100)
+            if liq:
+                db.save_liquidation_events(symbol, inst_id, liq)
 
         logger.info("Синхронизация деривативов завершена")
 

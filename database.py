@@ -1,5 +1,5 @@
 # database.py
-from sqlalchemy import create_engine, desc
+from sqlalchemy import select, create_engine, desc
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 from models import Base, KlineData, OscillatorData
@@ -95,15 +95,16 @@ class Database:
             logger.info(f"Сохранены данные осцилляторов для свечи {kline_id}")
 
     def get_last_klines(self, symbol: str, limit: int = 100) -> List[dict]:
-        """Получение последних свечей для указанного инструмента."""
+        """Получение последних свечей для указанного инструмента (SQLAlchemy 2.0)."""
         with self.get_session() as session:
-            klines = (
-                session.query(KlineData)
-                .filter_by(symbol=symbol)
-                .order_by(desc(KlineData.open_time))
+            stmt = (
+                select(KlineData)
+                .where(KlineData.symbol == symbol)
+                .order_by(KlineData.open_time.desc())
                 .limit(limit)
-                .distinct(KlineData.open_time).unique().all()
+                .distinct()
             )
+            klines = session.execute(stmt).scalars().all()
             return [
                 {
                     'open_time': k.open_time,
@@ -177,5 +178,30 @@ class Database:
             stmt = stmt.on_conflict_do_nothing(constraint="uq_funding_event")
             session.execute(stmt)
             logger.info(f"Сохранено {len(rows)} funding events для {symbol}")
+
+    def save_liquidation_events(self, symbol: str, inst_id: str, events: list):
+        """Пакетное сохранение событий ликвидаций."""
+        if not events:
+            return
+        from datetime import datetime as _dt
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from models import LiquidationEvent
+        with self.get_session() as session:
+            rows = [
+                {
+                    "symbol": symbol,
+                    "inst_id": inst_id,
+                    "timestamp": _dt.fromtimestamp(e["timestamp"] / 1000),
+                    "pos_side": e["pos_side"],
+                    "price": e["price"],
+                    "size_contracts": e["size_contracts"],
+                    "size_usd": e.get("size_usd"),
+                    "source": "okx",
+                } for e in events
+            ]
+            stmt = pg_insert(LiquidationEvent).values(rows)
+            stmt = stmt.on_conflict_do_nothing(constraint="uq_liquidation_event")
+            session.execute(stmt)
+            logger.info(f"Сохранено {len(rows)} liquidation events для {symbol}")
 
 db = Database()

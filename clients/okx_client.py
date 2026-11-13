@@ -164,6 +164,34 @@ class OKXClient(MarketDataClient):
             logger.error(f"[OKX] long-short-account-ratio {ccy}: {e}")
             return None
 
+    def fetch_liquidations(self, inst_id: str, uly: str = None, limit: int = 100) -> List[Dict]:
+        """GET /api/v5/public/liquidation-orders — historical liquidations."""
+        if uly is None:
+            uly = inst_id.replace("-SWAP", "")
+        try:
+            r = requests.get(
+                f"{self.BASE_URL}/public/liquidation-orders",
+                params={"instType": "SWAP", "uly": uly, "state": "filled",
+                        "instId": inst_id, "limit": str(min(limit, 100))},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json().get("data") or []
+            out = []
+            for group in data:
+                for d in group.get("details") or []:
+                    out.append({
+                        "timestamp": int(d["ts"]),
+                        "pos_side": d.get("posSide", "").lower(),
+                        "price": float(d["bkPx"]),
+                        "size_contracts": float(d["sz"]),
+                        "size_usd": float(d["bkPx"]) * float(d["sz"]),
+                    })
+            return out
+        except Exception as e:
+            logger.error(f"[OKX] liquidation-orders {inst_id}: {e}")
+            return []
+
     def fetch_funding_history(self, inst_id: str, limit: int = 100) -> List[Dict]:
         try:
             r = requests.get(f"{self.BASE_URL}/public/funding-rate-history",
