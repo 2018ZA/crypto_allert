@@ -4,13 +4,13 @@ from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 from models import Base, KlineData, OscillatorData
 from config import config
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 import logging
 
 from models import DerivativesSnapshot, FundingEvent
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -56,18 +56,23 @@ class Database:
         """
         with self.get_session() as session:
             saved_count = 0
+            now_ts = datetime.now(timezone.utc).replace(tzinfo=None)
             for kline in kline_list:
                 try:
+                    # Защита от look-ahead: не сохраняем незакрытые бары
+                    close_ts = datetime.fromtimestamp(kline['close_time'] / 1000, tz=timezone.utc).replace(tzinfo=None)
+                    if close_ts > now_ts:
+                        continue
                     existing = session.query(KlineData).filter_by(
-                        open_time=datetime.fromtimestamp(kline['open_time'] / 1000),
+                        open_time=datetime.fromtimestamp(kline['open_time'] / 1000, tz=timezone.utc).replace(tzinfo=None),
                         symbol=symbol,
                     ).first()
 
                     if not existing:
                         kline_data = KlineData(
                             symbol=symbol,
-                            open_time=datetime.fromtimestamp(kline['open_time'] / 1000),
-                            close_time=datetime.fromtimestamp(kline['close_time'] / 1000),
+                            open_time=datetime.fromtimestamp(kline['open_time'] / 1000, tz=timezone.utc).replace(tzinfo=None),
+                            close_time=datetime.fromtimestamp(kline['close_time'] / 1000, tz=timezone.utc).replace(tzinfo=None),
                             open_price=float(kline['open']),
                             high_price=float(kline['high']),
                             low_price=float(kline['low']),
@@ -137,7 +142,7 @@ class Database:
             stmt = pg_insert(DerivativesSnapshot).values(
                 symbol=symbol,
                 inst_id=inst_id,
-                timestamp=datetime.fromtimestamp(snapshot["timestamp"] / 1000),
+                timestamp=datetime.fromtimestamp(snapshot["timestamp"] / 1000, tz=timezone.utc).replace(tzinfo=None),
                 funding_rate=snapshot.get("funding_rate"),
                 open_interest_contracts=snapshot.get("open_interest_contracts"),
                 open_interest_usd=snapshot.get("open_interest_usd"),
@@ -170,7 +175,7 @@ class Database:
             rows = [{
                 "symbol": symbol,
                 "inst_id": inst_id,
-                "funding_time": datetime.fromtimestamp(e["funding_time"] / 1000),
+                "funding_time": datetime.fromtimestamp(e["funding_time"] / 1000, tz=timezone.utc).replace(tzinfo=None),
                 "realized_rate": e["realized_rate"],
                 "source": "okx",
             } for e in events]
@@ -191,7 +196,7 @@ class Database:
                 {
                     "symbol": symbol,
                     "inst_id": inst_id,
-                    "timestamp": _dt.fromtimestamp(e["timestamp"] / 1000),
+                    "timestamp": _dt.fromtimestamp(e["timestamp"] / 1000, tz=timezone.utc).replace(tzinfo=None),
                     "pos_side": e["pos_side"],
                     "price": e["price"],
                     "size_contracts": e["size_contracts"],

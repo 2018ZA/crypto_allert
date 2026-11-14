@@ -46,6 +46,10 @@ class OKXClient(MarketDataClient):
                 return []
 
             bar_ms = _BAR_MS.get(bar, 3_600_000)
+            # OKX /market/candles возвращает незакрытую свечу с confirm="0".
+            # Фильтруем: только закрытые (confirm=="1"), иначе look-ahead bias.
+            data = payload.get("data") or []
+            data = [row for row in data if len(row) > 8 and row[8] == "1"]
             # OKX отдаёт от новых к старым — инвертируем для единого формата
             return [
                 {

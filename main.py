@@ -2,7 +2,7 @@
 import schedule
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 
 
@@ -63,7 +63,7 @@ class CryptoAnalyzerApp:
             'overall_score', 'overall_signal',
         ]
         filtered = {k: analysis_result[k] for k in allowed_fields if k in analysis_result}
-        filtered['timestamp'] = analysis_result.get('timestamp', datetime.now())
+        filtered['timestamp'] = analysis_result.get('timestamp', datetime.now(timezone.utc).replace(tzinfo=None))
         filtered['symbol'] = analysis_result.get('symbol', 'unknown')
         return filtered
 
@@ -95,7 +95,7 @@ class CryptoAnalyzerApp:
         """Основная логика обновления для всех инструментов."""
         try:
             logger.info("-" * 50)
-            logger.info(f"Запуск обновления: {datetime.now()}")
+            logger.info(f"Запуск обновления: {datetime.now(timezone.utc).replace(tzinfo=None)}")
 
             if not self.client.is_available():
                 logger.error(f"{self.client.name} недоступен, пропуск итерации")
@@ -116,7 +116,7 @@ class CryptoAnalyzerApp:
                 # Определяем, сколько свечей запрашивать
                 latest_kline = self.get_latest_kline(inst_id)
                 if latest_kline:
-                    time_since_last = datetime.now() - latest_kline['open_time']
+                    time_since_last = datetime.now(timezone.utc).replace(tzinfo=None) - latest_kline['open_time']
                     hours_since_last = time_since_last.total_seconds() / 3600
                     logger.info(
                         f"[{inst_id}] Последняя свеча: {latest_kline['open_time']}, "
@@ -187,7 +187,7 @@ class CryptoAnalyzerApp:
         logger.info("Выполнение первого обновления...")
         self.process_update()
 
-        schedule.every(config.UPDATE_INTERVAL_HOURS).hours.do(self.process_update)
+        schedule.every().hour.at(":01").do(self.process_update)
         logger.info(
             f"Планировщик запущен. Обновление каждые "
             f"{config.UPDATE_INTERVAL_HOURS} час(а)"
@@ -262,7 +262,7 @@ def main():
                     logger.info(f"--- Тест {inst_id} ({symbol}) ---")
                     latest_kline = app.get_latest_kline(inst_id)
                     if latest_kline:
-                        time_diff = datetime.now() - latest_kline['open_time']
+                        time_diff = datetime.now(timezone.utc).replace(tzinfo=None) - latest_kline['open_time']
                         hours_since_last = time_diff.total_seconds() / 3600
                         if hours_since_last < 0.92:
                             limit = 1
@@ -316,7 +316,13 @@ if __name__ == "__main__":
     app.initialize()
 
     # Основной цикл анализа (существующий)
-    schedule.every(config.UPDATE_INTERVAL_HOURS).hours.do(app.process_update)
+    # Разовый первый process_update при старте (не ждать :01)
+    try:
+        app.process_update()
+    except Exception as _e:
+        logger.error(f"Initial process_update failed: {_e}")
+
+    schedule.every().hour.at(":01").do(app.process_update)
 
     # Синхронизация деривативов — отдельная задача, чаще
     # Разовый первый запуск при старте (не ждать 15 минут)
